@@ -1,7 +1,8 @@
 import json
 
 from src.api_client import APIClient
-from src.data_utils import calculate_net_total
+from src.financial_analysis import *
+from src.financial_forecast import *
 
 api_client = APIClient()
 TEST_USERNAME = "Heelin"
@@ -29,13 +30,23 @@ if login_response:
 
         if profile_response and profile_response.get("success"):
             accounts_data = profile_response.get("data", [])
+            analysis_results = calculate_financial_metrics(accounts_data)
+            format_and_print_metrics(analysis_results)
 
-            # --- NEW LOGIC: Calculate Net Total ---
-            net_total, month_key = calculate_net_total(accounts_data)
+            account_summary_df = summarize_all_accounts(accounts_data)
+            print_account_summary(account_summary_df)
 
-            print("\n============================================")
-            print(f"  NET PORTFOLIO TOTAL ({month_key}): {net_total:,.2f}")
-            print("============================================")
+            print("\n" + "=" * 50)
+            print("RUNNING FINANCIAL FORECAST...")
+            print("=" * 50)
+
+            # Set your desired parameters (e.g., 10 years, 8% savings return, 9.65% loan cost)
+            forecast_results = run_net_worth_forecast(
+                accounts_data,
+                forecast_years=10
+            )
+
+            format_and_print_forecast(forecast_results)
 
         else:
             print("\nSkipping Aggregation: Failed to retrieve profile data.")
