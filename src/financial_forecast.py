@@ -5,6 +5,38 @@ import numpy as np
 import pandas as pd
 
 
+def calculate_base_currency_history(account_history):
+    """
+    Processes an account's monthly history to calculate all values (Balance, Contribution, P&L)
+    in the base currency (BC), incorporating exchange rate movements.
+    """
+    processed_history = []
+    sorted_history = sorted(account_history, key=lambda x: x['monthKey'])
+
+    for i, h in enumerate(sorted_history):
+        current_rate = h.get('exchangeRate', 1.0)
+        opening_rate = current_rate
+
+        # Calculate Base Currency Values
+        closing_bc = h['closingBalance'] * current_rate
+        opening_bc = h['openingBalance'] * opening_rate
+        contribution_bc = h['contribution'] * current_rate  # Contribution valued at current month-end rate
+
+        # Calculate Base Currency Monthly P&L (Growth + Currency Gain/Loss)
+        monthly_pnl_bc = closing_bc - opening_bc - contribution_bc
+
+        # Create a record with BC values
+        bc_record = h.copy()
+        bc_record['closingBalance'] = closing_bc
+        bc_record['openingBalance'] = opening_bc
+        bc_record['contribution'] = contribution_bc
+        bc_record['monthly_pnl_bc'] = monthly_pnl_bc  # New column for P&L
+
+        processed_history.append(bc_record)
+
+    return processed_history
+
+
 def calculate_loan_payoff_date(principal, annual_rate, monthly_payment, start_date=None):
     """
     Calculates the number of months required to pay off a loan and the resulting date,
@@ -72,11 +104,11 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
     """
     history = account_data.get('monthlyHistory', [])
     account_type = account_data.get('type')
-
-    if not history:
+    processed_history = calculate_base_currency_history(history)
+    if not processed_history:
         return {'avg_rate': 0.0, 'avg_contribution': 0.0}
 
-    df = pd.DataFrame(history)
+    df = pd.DataFrame(processed_history)
 
     if df.empty:
         return {'avg_rate': 0.0, 'avg_contribution': 0.0}
@@ -95,30 +127,32 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
 
     # 2. Determine Rate based on Account Type
     avg_rate = 0.0
+    avg_pnl_currency = 0.0
 
     if account_type == 'SAVING':
-        # Calculate monthly P&L (Gain/Loss only: Closing - Opening - Contribution)
-        df_lookback['monthly_pnl'] = df_lookback['closingBalance'] - df_lookback['openingBalance'] - df_lookback[
-            'contribution']
-
-        # Average the monthly P&L currency value and the closing balance for the period
-        avg_monthly_pnl_currency = df_lookback['monthly_pnl'].mean()
+        # P&L and Balance are already in Base Currency
+        avg_pnl_currency = df_lookback['monthly_pnl_bc'].mean()  # Use the new BC P&L field
         avg_balance_for_rate_calc = df_lookback['closingBalance'].mean()
 
         if avg_balance_for_rate_calc > 0:
-            # Annual Rate = (Avg Monthly P&L / Avg Balance) * 12
-            avg_monthly_rate = avg_monthly_pnl_currency / avg_balance_for_rate_calc
+            avg_monthly_rate = avg_pnl_currency / avg_balance_for_rate_calc
             avg_rate = avg_monthly_rate * 12.0
 
     elif account_type == 'LOAN':
-        # For LOANs, use the average historical interest rate (as a percentage)
-        # Use fillna(0) for safety
-        avg_rate = df_lookback.get('interestRate', pd.Series([0.0])).mean()
+        # Use the original data for interestRate (assuming it is independent of currency)
+        original_df = pd.DataFrame(history)
+        original_df['monthKey'] = pd.to_datetime(original_df['monthKey'])
+        original_df = original_df.sort_values(by='monthKey', ascending=True).tail(lookback_months)
 
-    # The rate returned is the Annual Rate (decimal for SAVING, percentage for LOAN)
+        if 'interestRate' in original_df.columns:
+            avg_rate = original_df['interestRate'].mean()
+        else:
+            avg_rate = 0.0
+
     return {
         'avg_rate': avg_rate if account_type == 'SAVING' else avg_rate / 100.0,
-        'avg_contribution': avg_contribution
+        'avg_contribution': avg_contribution,
+        'avg_monthly_pnl_currency': avg_pnl_currency
     }
 
 # The formula used is the Future Value of an Annuity (FV)
@@ -206,12 +240,11 @@ def run_net_worth_forecast(accounts_data, forecast_years=10):
         account_type = account.get('type')
         account_name = account.get('name')
 
-        # Get the latest data for the starting balance and contribution
-        monthly_history = account.get('monthlyHistory', [])
-        if not monthly_history:
-            continue
-
-        latest_history = sorted(monthly_history, key=lambda x: x['monthKey'])[-1]
+        history = account.get('monthlyHistory', [])
+        processed_history = calculate_base_currency_history(history)
+        if not processed_history:
+           continue
+        latest_history = sorted(processed_history, key=lambda x: x['monthKey'])[-1]
         current_balance = latest_history['closingBalance']
 
         if current_balance <= 0.0:
@@ -220,6 +253,9 @@ def run_net_worth_forecast(accounts_data, forecast_years=10):
         avg_inputs = get_rolling_average_inputs(account, lookback_months=3)
         historical_rate = avg_inputs['avg_rate']
         monthly_payment_raw = avg_inputs['avg_contribution']
+
+        if current_balance <= 0.0:
+            continue
 
         rate = 0.0
         projected_balance = 0.0

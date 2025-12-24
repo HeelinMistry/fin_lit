@@ -1,6 +1,38 @@
 import pandas as pd
 
 
+def calculate_base_currency_history(account_history):
+    """
+    Processes an account's monthly history to calculate all values (Balance, Contribution, P&L)
+    in the base currency (BC), incorporating exchange rate movements.
+    """
+    processed_history = []
+    sorted_history = sorted(account_history, key=lambda x: x['monthKey'])
+
+    for i, h in enumerate(sorted_history):
+        current_rate = h.get('exchangeRate', 1.0)
+        opening_rate = current_rate
+
+        # Calculate Base Currency Values
+        closing_bc = h['closingBalance'] * current_rate
+        opening_bc = h['openingBalance'] * opening_rate
+        contribution_bc = h['contribution'] * current_rate  # Contribution valued at current month-end rate
+
+        # Calculate Base Currency Monthly P&L (Growth + Currency Gain/Loss)
+        monthly_pnl_bc = closing_bc - opening_bc - contribution_bc
+
+        # Create a record with BC values
+        bc_record = h.copy()
+        bc_record['closingBalance'] = closing_bc
+        bc_record['openingBalance'] = opening_bc
+        bc_record['contribution'] = contribution_bc
+        bc_record['monthly_pnl_bc'] = monthly_pnl_bc  # New column for P&L
+
+        processed_history.append(bc_record)
+
+    return processed_history
+
+
 def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3):
     """
     Calculates the first month (if any) where the **3-Month Rolling Average Cumulative** Profit/Loss (Growth) surpasses the **3-Month Rolling Average Cumulative** Contribution
@@ -19,13 +51,11 @@ def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3
     for account in accounts_data:
         if account.get('type') != 'SAVING':
             continue
-        for history in account.get('monthlyHistory', []):
-            record = {
-                'monthKey': history['monthKey'],
-                'contribution': history['contribution'],
-            }
+        bc_history = calculate_base_currency_history(account.get("monthlyHistory", []))
+        for history in bc_history:
+            record = {'monthKey': history['monthKey'], 'contribution': history['contribution'],
+                      'monthly_pnl': history['closingBalance'] - history['openingBalance'] - history['contribution']}
             # P&L (Growth) = Closing - Opening - Contribution
-            record['monthly_pnl'] = history['closingBalance'] - history['openingBalance'] - history['contribution']
             all_records.append(record)
 
     if not all_records:
@@ -63,6 +93,7 @@ def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3
     else:
         return None
 
+
 def calculate_financial_metrics(accounts_data):
     """
     Parses financial data, calculates overall contributions, and the true
@@ -74,8 +105,9 @@ def calculate_financial_metrics(accounts_data):
     for account in accounts_data:
         account_name = account.get('name')
         account_type = account.get('type')
+        bc_history = calculate_base_currency_history(account.get("monthlyHistory", []))
 
-        for history in account.get('monthlyHistory', []):
+        for history in bc_history:
             record = {
                 'name': account_name,
                 'type': account_type,
@@ -226,14 +258,15 @@ def summarize_all_accounts(accounts_data):
     for account in accounts_data:
         account_name = account.get('name')
         account_type = account.get('type')
-        monthly_history = account.get('monthlyHistory', [])
 
-        if not monthly_history:
+        history = account.get('monthlyHistory', [])
+        processed_history = calculate_base_currency_history(history)
+        if not processed_history:
             continue
 
         # Find the latest month's history
         # We sort by monthKey to ensure the last item is the most recent (assuming standard YYYY-MM format)
-        latest_history = sorted(monthly_history, key=lambda x: x['monthKey'])[-1]
+        latest_history = sorted(processed_history, key=lambda x: x['monthKey'])[-1]
 
         # --- Calculate Latest P&L/Interest Paid ---
 
@@ -249,8 +282,8 @@ def summarize_all_accounts(accounts_data):
             latest_pnl = closing_balance - opening_balance - contribution
 
             # Overall P&L (Total Change - Total Contributions)
-            earliest_opening = monthly_history[0].get('openingBalance', 0.0)
-            total_contributions = sum(h.get('contribution', 0) for h in monthly_history)
+            earliest_opening = processed_history[0].get('openingBalance', 0.0)
+            total_contributions = sum(h.get('contribution', 0) for h in processed_history)
             historical_pnl = closing_balance - earliest_opening - total_contributions
 
             balance_label = "Current Value"
@@ -263,10 +296,10 @@ def summarize_all_accounts(accounts_data):
 
             # Overall Historical Interest Paid
             total_principal_paid = opening_balance - closing_balance  # Approximation for single month
-            total_contributions = sum(h.get('contribution', 0) for h in monthly_history)
+            total_contributions = sum(h.get('contribution', 0) for h in processed_history)
 
-            earliest_opening = monthly_history[0].get('openingBalance', 0.0)
-            latest_closing = monthly_history[-1].get('closingBalance', 0.0)
+            earliest_opening = processed_history[0].get('openingBalance', 0.0)
+            latest_closing = processed_history[-1].get('closingBalance', 0.0)
 
             total_principal_paid_hist = earliest_opening - latest_closing
             historical_pnl = total_contributions - total_principal_paid_hist  # Total Interest Paid
