@@ -103,11 +103,11 @@ class APIClient:
 
         return None
 
-    def get_user_accounts(self, user_id):
+    def get_user_accounts(self):
         """
         [UPDATED] Example of a protected endpoint that uses the new error handler.
         """
-        endpoint = f"/api/accounts/{user_id}"
+        endpoint = f"/api/accounts"
 
         if not self.auth_token:
             print("🚫 Error: Cannot access protected endpoint. Please log in first.")

@@ -17,13 +17,9 @@ if login_response:
     print(json.dumps(login_response, indent=4))
     print("------------------------------------------")
 
-    # 4. Scenario: Use the acquired token for a protected resource
-    # Assuming the login response contains the user ID
-    user_id = login_response.get("data", {}).get("user", {}).get("id")
-
-    if user_id:
-        print(f"\n--- SCENARIO 2: Access Protected Profile (User ID: {user_id}) ---")
-        profile_response = api_client.get_user_accounts(user_id)
+    if api_client.auth_token:
+        print(f"\n--- SCENARIO 2: Access Protected Profile ---")
+        profile_response = api_client.get_user_accounts()
         print("\n--- Full Profile Response Data ---")
         print(json.dumps(profile_response, indent=4))
         print("----------------------------------")
