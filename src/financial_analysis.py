@@ -1,5 +1,5 @@
 import pandas as pd
-
+import logging
 
 def calculate_base_currency_history(account_history):
     """
@@ -94,12 +94,54 @@ def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3
         return None
 
 
+def log_initial_accounts_data(accounts_data):
+    """Logs the raw accounts data in a tabular format using the DEBUG level."""
+
+    # We only log the key fields to keep the debug log concise
+    log_records = []
+
+    for account in accounts_data:
+        account_name = account.get('name')
+        account_type = account.get('type')
+
+        # Check if monthly history exists and is iterable
+        monthly_history = account.get("monthlyHistory", [])
+
+        for history in monthly_history:
+            log_records.append({
+                'Account': account_name,
+                'Type': account_type,
+                'Month': history.get('monthKey', 'N/A'),
+                'Opening': history.get('openingBalance', 0.0),
+                'Contribution': history.get('contribution', 0.0),
+                'Closing': history.get('closingBalance', 0.0),
+                'ExchangeRate': history.get('exchangeRate', 0.0),
+                'InterestRate': history.get('interestRate', 0.0),
+                'TermsLeft': history.get('termsLeft', 0.0)
+            })
+
+    if log_records:
+        df_log = pd.DataFrame(log_records)
+
+        # Format currency columns for readability
+        for col in ['Opening', 'Contribution', 'Closing']:
+            df_log[col] = df_log[col].apply(lambda x: f'{x:,.2f}')
+
+        logging.info("\n--- Initial Raw Accounts Data Received ---")
+        # Use to_markdown for a clean, text-based table
+        logging.info(df_log.to_markdown(index=False, numalign="right"))
+        logging.info("------------------------------------------")
+    else:
+        logging.info("No raw account history data received.")
+
+
 def calculate_financial_metrics(accounts_data):
     """
     Parses financial data, calculates overall contributions, and the true
     NET Profit/Loss (P&L) by treating SAVING gains as positive and LOAN
     interest costs as negative.
     """
+    log_initial_accounts_data(accounts_data)
     all_records = []
 
     for account in accounts_data:
@@ -141,6 +183,7 @@ def calculate_financial_metrics(accounts_data):
             all_records.append(record)
 
     if not all_records:
+        logging.info("Analysis complete: No relevant account history (SAVING or LOAN) found.")
         return None
 
     df = pd.DataFrame(all_records)
@@ -186,27 +229,27 @@ def calculate_financial_metrics(accounts_data):
 
 def format_and_print_metrics(results):
     """
-    Formats and prints the financial results, using the combined
-    Net P&L and Net Balance from the financial analysis.
+    Formats and logs the financial results using logging.INFO, which will
+    output to both the console (user-facing) and the log file.
     """
     if not results:
         # Adjusted message for clarity when no data is found
-        print("\n--- 💰 Financial Analysis Result ---")
-        print("No account data (SAVING or LOAN) available for analysis.")
+        logging.info("\n--- 💰 Financial Analysis Result ---")
+        logging.info("No account data (SAVING or LOAN) available for analysis.")
         return
 
     # --- 1. Overall Summary (Netting Assets and Liabilities) ---
-    print("\n--- 💰 Overall Financial Summary ---")
+    logging.info("\n--- 💰 Overall Financial Summary ---")
 
     # Updated keys from the analysis function:
-    print(f"Total Cash Flow (Contributions):    {results['total_contribution']:,.2f}")
-    print(f"Overall Net Profit/Loss (P&L):      {results['overall_net_pnl']:,.2f}")
-    print(f"Current Net Worth (A - L):          {results['latest_net_balance']:,.2f}")
-    print("-----------------------------------")
+    logging.info(f"Total Cash Flow (Contributions):    {results['total_contribution']:,.2f}")
+    logging.info(f"Overall Net Profit/Loss (P&L):      {results['overall_net_pnl']:,.2f}")
+    logging.info(f"Current Net Worth (A - L):          {results['latest_net_balance']:,.2f}")
+    logging.info("-----------------------------------")
 
     # --- 2. Last 3 Months Breakdown (Aggregated) ---
 
-    print("\n--- 📅 Last 3 Months Breakdown (Net Aggregation) ---")
+    logging.info("\n--- 📅 Last 3 Months Breakdown (Net Aggregation) ---")
 
     if not results['monthly_summary'].empty:
         summary_df = results['monthly_summary'].rename(columns={
@@ -225,20 +268,16 @@ def format_and_print_metrics(results):
         )
 
         # Print the Markdown table
-        print(summary_df.to_markdown(index=False))
+        logging.info(summary_df.to_markdown(index=False))
 
         crossover_point = results['crossover_point']
         if crossover_point:
-            print(f"Growth > Contribution Crossover:  **{crossover_point}** (Your money works harder!)")
-
+            logging.info(f"Growth > Contribution Crossover:  **{crossover_point}** (Your money works harder!)")
         else:
-            print("Growth > Contribution Crossover:  **Not Yet Reached** (Keep contributing!)")
-
-        print("-----------------------------------")
-        # A visualization would help the user see the trend:
-        print("")
+            logging.info("Growth > Contribution Crossover:  **Not Yet Reached** (Keep contributing!)")
+        logging.info("-----------------------------------")
     else:
-        print("No monthly history data available for the last three months.")
+        logging.info("No monthly history data available for the last three months.")
 
 
 def summarize_all_accounts(accounts_data):
@@ -326,14 +365,14 @@ def summarize_all_accounts(accounts_data):
     return df
 
 
-def print_account_summary(summary_df):
+def format_and_print_account_summary(summary_df):
     """Formats and prints the detailed account summary."""
     if summary_df.empty:
-        print("\n--- 🧾 Detailed Account Summary ---")
-        print("No account data found.")
+        logging.info("\n--- 🧾 Detailed Account Summary ---")
+        logging.info("No account data found.")
         return
 
-    print("\n--- 🧾 Detailed Account Summary ---")
+    logging.info("\n--- 🧾 Detailed Account Summary ---")
 
     # Identify dynamic columns (Current Value/Debt Balance, etc.) for formatting
     cols_to_format = [
@@ -346,4 +385,4 @@ def print_account_summary(summary_df):
         # Use .map to apply currency formatting
         summary_df[col] = summary_df[col].map(lambda x: f'{x:,.2f}' if not pd.isna(x) else '')
 
-    print(summary_df.to_markdown(index=False))
+    logging.info(summary_df.to_markdown(index=False))

@@ -3,6 +3,9 @@ import json
 from src.api_client import APIClient
 from src.financial_analysis import *
 from src.financial_forecast import *
+from src.financial_logger import *
+
+setup_user_output()
 
 api_client = APIClient()
 TEST_USERNAME = "Heelin"
@@ -30,16 +33,13 @@ if login_response:
             format_and_print_metrics(analysis_results)
 
             account_summary_df = summarize_all_accounts(accounts_data)
-            print_account_summary(account_summary_df)
+            format_and_print_account_summary(account_summary_df)
 
-            print("\n" + "=" * 50)
-            print("RUNNING FINANCIAL FORECAST...")
-            print("=" * 50)
+            summarize_latest_month_from_data(accounts_data)
 
-            # Set your desired parameters (e.g., 10 years, 8% savings return, 9.65% loan cost)
             forecast_results = run_net_worth_forecast(
                 accounts_data,
-                forecast_years=10
+                forecast_years=5
             )
 
             format_and_print_forecast(forecast_results)

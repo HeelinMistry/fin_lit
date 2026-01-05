@@ -1,4 +1,5 @@
 import datetime
+import logging
 import math
 
 import numpy as np
@@ -93,12 +94,12 @@ def calculate_loan_payoff_date(principal, annual_rate, monthly_payment, start_da
 def get_rolling_average_inputs(account_data, lookback_months=3):
     """
     Calculates the rolling average of the annual rate and contribution
-    over the last N months for a single account.
-
+    over the last N months for a single account. If lookback_months is
+    None or <= 0, the average is calculated over ALL available history.
     Args:
         account_data (dict): A single account dictionary object.
-        lookback_months (int): The number of months to average over.
-
+        lookback_months (int | None): The number of recent months to average over.
+                                      If None or 0, uses all months.
     Returns:
         dict: A dictionary containing the average rate and contribution.
     """
@@ -106,22 +107,35 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
     account_type = account_data.get('type')
     processed_history = calculate_base_currency_history(history)
     if not processed_history:
+        logging.info(f"Account '{account_data.get('name', 'Unknown')}' has no processed history. Returning zeros.")
         return {'avg_rate': 0.0, 'avg_contribution': 0.0}
 
     df = pd.DataFrame(processed_history)
 
     if df.empty:
+        logging.info(
+            f"Account '{account_data.get('name', 'Unknown')}' has empty DataFrame after processing. Returning zeros.")
         return {'avg_rate': 0.0, 'avg_contribution': 0.0}
 
     # Prepare DataFrame: Sort and select lookback window
-    df['monthKey'] = pd.to_datetime(df['monthKey'])
+    df['monthKey'] = pd.to_datetime(df['monthKey'], format='%Y-%m')
     df = df.sort_values(by='monthKey', ascending=False)
-    df_lookback = df.head(lookback_months).copy()
+    if lookback_months is None or lookback_months <= 0:
+        # If None or <= 0, use ALL months (df contains all, as it's sorted)
+        df_lookback = df.copy()
+        actual_lookback_used = len(df_lookback)
+        logging.debug(
+            f"Using ALL {actual_lookback_used} months for average calculation (lookback set to {lookback_months}).")
+    else:
+        # If a number > 0, use the specified number of months
+        df_lookback = df.head(lookback_months).copy()
+        actual_lookback_used = len(df_lookback)
+        logging.debug(
+            f"Using the last {actual_lookback_used} months for average calculation (lookback set to {lookback_months}).")
 
-    # If the lookback window is empty (e.g., account is new), return zeros
+        # If the lookback window is empty (e.g., less history than requested), return zeros
     if df_lookback.empty:
-        return {'avg_rate': 0.0, 'avg_contribution': 0.0}
-
+        return {'avg_rate': 0.0, 'avg_contribution': 0.0, 'avg_monthly_pnl_currency': 0.0}
     # 1. Calculate Average Monthly Payment (PMT)
     avg_contribution = df_lookback['contribution'].mean()
 
@@ -137,17 +151,25 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
         if avg_balance_for_rate_calc > 0:
             avg_monthly_rate = avg_pnl_currency / avg_balance_for_rate_calc
             avg_rate = avg_monthly_rate * 12.0
-
     elif account_type == 'LOAN':
-        # Use the original data for interestRate (assuming it is independent of currency)
         original_df = pd.DataFrame(history)
-        original_df['monthKey'] = pd.to_datetime(original_df['monthKey'])
-        original_df = original_df.sort_values(by='monthKey', ascending=True).tail(lookback_months)
-
-        if 'interestRate' in original_df.columns:
-            avg_rate = original_df['interestRate'].mean()
+        original_df['monthKey'] = pd.to_datetime(original_df['monthKey'], format='%Y-%m')
+        # Slicing the original data to match the determined lookback period
+        lookback_months = df_lookback['monthKey'].dt.strftime('%Y-%m').unique()
+        original_df['monthKey_str'] = original_df['monthKey'].dt.strftime('%Y-%m')
+        df_loan_lookback = original_df[original_df['monthKey_str'].isin(lookback_months)].copy()
+        avg_rate = 0.0  # Initialize avg_rate to 0.0
+        if 'interestRate' in df_loan_lookback.columns:
+            # 1. Sort the lookback data to ensure the newest month is at the top
+            #    We use the index from df_lookback which is already sorted DESC by monthKey
+            df_loan_lookback = df_loan_lookback.sort_values(by='monthKey', ascending=False)
+            # 2. Get the value from the first row that is NOT null (the latest month)
+            latest_rate = df_loan_lookback['interestRate'].dropna().iloc[0] if not df_loan_lookback[
+                'interestRate'].dropna().empty else 0.0
+            # Set the avg_rate to this latest rate
+            avg_rate = latest_rate
         else:
-            avg_rate = 0.0
+            avg_rate = 0.0  # Stays 0.0
 
     return {
         'avg_rate': avg_rate if account_type == 'SAVING' else avg_rate / 100.0,
@@ -317,16 +339,17 @@ def format_and_print_forecast(forecast_results):
     """Formats and prints the results of the net worth forecast."""
 
     if not forecast_results['projection_details']:
-        print("\n--- 🔮 Financial Forecast ---")
-        print("No account data available for projection.")
+        logging.info(f"\n--- 🔮 Financial Forecast ---")
+        logging.info("No account data available for projection.")
         return
 
     forecast_years = forecast_results['forecast_years']
 
     # --- Overall Summary ---
-    print(f"\n--- 🔮 {forecast_years} Year Financial Forecast Summary ---")
-    print(f"Projected Net Worth in {forecast_years} Years: {forecast_results['projected_net_worth']:,.2f}")
-    print("-----------------------------------------------------")
+    logging.info(f"\n--- 🔮 {forecast_years} Year Financial Forecast Summary ---")
+    logging.info(f"\n--- using all data average except loans ---")
+    logging.info(f"Projected Net Worth in {forecast_years} Years: {forecast_results['projected_net_worth']:,.2f}")
+    logging.info("-----------------------------------------------------")
 
     # --- Detail Table ---
     df = pd.DataFrame(forecast_results['projection_details'])
@@ -336,5 +359,117 @@ def format_and_print_forecast(forecast_results):
     df['Current Balance'] = df['Current Balance'].map(lambda x: f'{x:,.2f}')
     df[f'{forecast_years} Year Projection'] = df[f'{forecast_years} Year Projection'].map(lambda x: f'{x:,.2f}')
 
-    print("\n--- Account-by-Account Projection ---")
-    print(df.to_markdown(index=False))
+    logging.info("\n--- Account-by-Account Projection ---")
+    logging.info(df.to_markdown(index=False))
+
+
+def summarize_latest_month_from_data(accounts_data):
+    """
+    Calculates and prints the Net Contribution and Market Gain/Loss
+    for the latest month across all accounts using existing keys:
+    'contribution', 'openingBalance', and 'closingBalance'.
+
+    Args:
+        accounts_data (List[Dict]): The list of account objects, each containing
+                                    a 'monthlyHistory' list.
+    """
+    if not accounts_data:
+        logging.info("Error: The account data list is empty.")
+        return
+
+    latest_month_key = None
+    net_contribution = 0.0
+    total_pl = 0.0
+
+    # 1. First Pass: Find the single latest 'monthKey' across ALL accounts
+    for account in accounts_data:
+        history = account.get('monthlyHistory', [])
+        if history:
+            # Note: We assume the monthKey strings are comparable (e.g., 'YYYY-MM')
+            current_account_latest_key = sorted(history, key=lambda x: x['monthKey'])[-1]['monthKey']
+            if latest_month_key is None or current_account_latest_key > latest_month_key:
+                latest_month_key = current_account_latest_key
+
+    if not latest_month_key:
+        logging.info("No historical data found in any account to summarize.")
+        return
+
+    # Convert monthKey for printing (using datetime.datetime to fix previous error)
+    try:
+        latest_date = datetime.datetime.strptime(latest_month_key, "%Y-%m").date()
+        month_str = latest_date.strftime('%B %Y')
+    except ValueError:
+        # Fallback if the date format is unexpected
+        month_str = latest_month_key
+
+        # 2. Second Pass: Calculate P&L and Cashflow for the latest month
+    for account in accounts_data:
+        history = account.get('monthlyHistory', [])
+        # Find the specific record for the latest month
+        latest_record = next((d for d in history if d.get('monthKey') == latest_month_key), None)
+
+        if latest_record:
+            closing_balance = latest_record.get('closingBalance', 0.0)
+            opening_balance = latest_record.get('openingBalance', 0.0)
+
+            # --- Key Calculation Step ---
+
+            # Cashflow is directly available as 'contribution'
+            # For SAVING accounts, this is positive (deposit).
+            # For LOAN accounts, this is assumed to be negative (payment),
+            # but is provided as a positive number in the data structure,
+            # so we flip it for LOANs to represent a negative cash flow.
+
+            contribution = latest_record.get('contribution', 0.0)
+            account_type = account.get('type')
+
+            if account_type == 'LOAN':
+                # Treat loan payments as an outflow
+                monthly_cashflow = -contribution
+            else:
+                # Treat deposits as an inflow
+                monthly_cashflow = contribution
+
+            # P&L = Closing Balance - Opening Balance - Contribution (with proper sign)
+            # Since contribution is usually an absolute number in history,
+            # we use the absolute value here and let the loan type determine
+            # the sign of the P&L later.
+
+            # P&L is the net change *after* accounting for the cash movement:
+            monthly_pl = closing_balance - opening_balance - contribution
+
+            # For LOANs, the P&L is the interest accrual, which is a *negative* return
+            # on net worth, but a positive change in the loan's numerical balance.
+            # We must account for this by flipping the sign of P&L for loans.
+            if account_type == 'LOAN':
+                # Interest paid reduces net worth, so P&L is negative.
+                # Since P&L is calculated as a positive number (interest cost), we flip it.
+                monthly_pl = -monthly_pl
+
+                # --- Aggregation ---
+            net_contribution += monthly_cashflow
+            total_pl += monthly_pl
+
+    # --- Print the Summary ---
+    logging.info(f"\n--- 💰 Financial Summary for the Latest Month: {month_str} ---")
+
+    # Format values for readability
+    net_contribution_fmt = f"{net_contribution:,.2f}"
+    total_pl_fmt = f"{total_pl:,.2f}"
+
+    logging.info(f"| Net Contribution (Your Cash Flow): {' ' * (28 - len(net_contribution_fmt))} {net_contribution_fmt}")
+    logging.info(f"| Net Market Gain / (Loss) (Interest/Return): {' ' * (18 - len(total_pl_fmt))} {total_pl_fmt}")
+
+    # Optional: Provide the interpretation
+    net_change = net_contribution + total_pl
+    net_change_fmt = f"{net_change:,.2f}"
+
+    if net_change < 0:
+        logging.info(f"\n⚠️ WARNING: Overall Net Worth DECREASED by {net_change_fmt}.")
+        if total_pl < 0:
+            logging.info("Reason: High debt cost and/or poor asset performance.")
+        else:
+            logging.info("Reason: Contribution/Withdrawal was too low to offset debt cost.")
+    else:
+        logging.info(f"\n✅ GROWTH: Overall Net Worth INCREASED by {net_change_fmt}.")
+        logging.info("Reason: Total return (P&L) and contribution were positive.")
