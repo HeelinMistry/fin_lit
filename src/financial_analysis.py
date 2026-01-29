@@ -314,7 +314,6 @@ def summarize_all_accounts(accounts_data):
         closing_balance = latest_history['closingBalance']
 
         # Calculate historical P&L (same approach as calculate_financial_metrics)
-        historical_pnl = 0.0
 
         if account_type == 'SAVING':
             # Latest P&L
@@ -334,7 +333,6 @@ def summarize_all_accounts(accounts_data):
             latest_pnl = contribution - principal_paid  # Interest Paid (Cost)
 
             # Overall Historical Interest Paid
-            total_principal_paid = opening_balance - closing_balance  # Approximation for single month
             total_contributions = sum(h.get('contribution', 0) for h in processed_history)
 
             earliest_opening = processed_history[0].get('openingBalance', 0.0)
