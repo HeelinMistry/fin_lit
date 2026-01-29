@@ -37,10 +37,7 @@ if login_response:
 
             summarize_latest_month_from_data(accounts_data)
 
-            forecast_results = run_net_worth_forecast(
-                accounts_data,
-                forecast_years=5
-            )
+            forecast_results = run_net_worth_forecast(accounts_data, forecast_years=5)
 
             format_and_print_forecast(forecast_results)
 
