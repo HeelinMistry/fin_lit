@@ -87,7 +87,7 @@ def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3
     crossover_df = monthly_data[monthly_data['cumulative_pnl_smooth'] > monthly_data['cumulative_contribution_smooth']]
 
     if not crossover_df.empty:
-        # Get the first month where the condition is met
+        # Get the first month when the condition is met
         crossover_month = crossover_df.iloc[0]['monthKey']
         return crossover_month.strftime("%Y-%m")
     else:
