@@ -43,6 +43,9 @@ if login_response:
             forecast_results = run_net_worth_forecast(accounts_data, forecast_years=5, lookback_months=5)
             format_and_print_forecast(forecast_results)
 
+            forecast_results = run_net_worth_forecast(accounts_data, forecast_years=5, lookback_months=0)
+            format_and_print_forecast(forecast_results)
+
         else:
             print("\nSkipping Aggregation: Failed to retrieve profile data.")
     else:
