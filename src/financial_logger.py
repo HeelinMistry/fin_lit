@@ -44,7 +44,7 @@ def setup_user_output(console_level=logging.INFO, log_directory='logs'):
     root_logger.addHandler(console_handler)
 
     # File Handler (Complete technical and user output)
-    file_handler = logging.FileHandler(log_file_path, mode='a')  # 'a' for append
+    file_handler = logging.FileHandler(log_file_path, mode='w')  # 'w' for write (overwrite)
     file_handler.setFormatter(file_formatter)
     file_handler.setLevel(console_level)
     root_logger.addHandler(file_handler)
