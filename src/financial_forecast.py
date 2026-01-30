@@ -155,9 +155,9 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
         original_df = pd.DataFrame(history)
         original_df['monthKey'] = pd.to_datetime(original_df['monthKey'], format='%Y-%m')
         # Slicing the original data to match the determined lookback period
-        lookback_months = df_lookback['monthKey'].dt.strftime('%Y-%m').unique()
+        lookback_months_list = df_lookback['monthKey'].dt.strftime('%Y-%m').unique()
         original_df['monthKey_str'] = original_df['monthKey'].dt.strftime('%Y-%m')
-        df_loan_lookback = original_df[original_df['monthKey_str'].isin(lookback_months)].copy()
+        df_loan_lookback = original_df[original_df['monthKey_str'].isin(lookback_months_list)].copy()
         avg_rate = 0.0  # Initialize avg_rate to 0.0
         if 'interestRate' in df_loan_lookback.columns:
             # 1. Sort the lookback data to ensure the newest month is at the top
@@ -219,15 +219,14 @@ def calculate_simple_projection(current_balance, annual_rate, monthly_payment, m
     return future_value_of_pv + future_value_of_pmt
 
 
-def run_net_worth_forecast(accounts_data, forecast_years=10):
+def run_net_worth_forecast(accounts_data, forecast_years=10, lookback_months=3):
     """
     Runs a net worth forecast by projecting the future balance for each account.
 
     Args:
         accounts_data (list): The list of account objects.
         forecast_years (int): The number of years to project.
-        savings_rate (float): Expected annual return rate for SAVING accounts (as decimal).
-        loan_rate (float): Effective annual interest rate for LOAN accounts (as decimal).
+        lookback_months (int): The number of months to look back for rate calculation.
 
     Returns:
         dict: Projected net worth and a list of projected account details.
@@ -272,7 +271,7 @@ def run_net_worth_forecast(accounts_data, forecast_years=10):
         if current_balance <= 0.0:
             continue
 
-        avg_inputs = get_rolling_average_inputs(account, lookback_months=3)
+        avg_inputs = get_rolling_average_inputs(account, lookback_months=lookback_months)
         historical_rate = avg_inputs['avg_rate']
         monthly_payment_raw = avg_inputs['avg_contribution']
 
@@ -330,6 +329,7 @@ def run_net_worth_forecast(accounts_data, forecast_years=10):
 
     return {
         'forecast_years': forecast_years,
+        'lookback_months': lookback_months,
         'projected_net_worth': projected_net_worth,
         'projection_details': projection_details
     }
@@ -344,10 +344,11 @@ def format_and_print_forecast(forecast_results):
         return
 
     forecast_years = forecast_results['forecast_years']
+    lookback_months = forecast_results.get('lookback_months', 3) # Default to 3 if not present
 
     # --- Overall Summary ---
     logging.info(f"\n--- 🔮 {forecast_years} Year Financial Forecast Summary ---")
-    logging.info(f"\n--- using all data average except loans ---")
+    logging.info(f"\n--- using {lookback_months}-month rolling average for rates (except loans) ---")
     logging.info(f"Projected Net Worth in {forecast_years} Years: {forecast_results['projected_net_worth']:,.2f}")
     logging.info("-----------------------------------------------------")
 
