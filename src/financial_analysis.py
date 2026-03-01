@@ -35,7 +35,7 @@ def calculate_base_currency_history(account_history):
 
 def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3):
     """
-    Calculates the first month (if any) where the **3-Month Rolling Average Cumulative** Profit/Loss (Growth) surpasses the **3-Month Rolling Average Cumulative** Contribution
+    Calculates the most recent month (if any) where the **3-Month Rolling Average Cumulative** Profit/Loss (Growth) surpasses the **3-Month Rolling Average Cumulative** Contribution
     for all SAVING accounts combined. This smooths out short-term volatility.
 
     Args:
@@ -87,8 +87,8 @@ def calculate_growth_surpass_contribution_point(accounts_data, lookback_months=3
     crossover_df = monthly_data[monthly_data['cumulative_pnl_smooth'] > monthly_data['cumulative_contribution_smooth']]
 
     if not crossover_df.empty:
-        # Get the first month when the condition is met
-        crossover_month = crossover_df.iloc[0]['monthKey']
+        # Get the LAST month where the condition is met (most recent occurrence)
+        crossover_month = crossover_df.iloc[-1]['monthKey']
         return crossover_month.strftime("%Y-%m")
     else:
         return None

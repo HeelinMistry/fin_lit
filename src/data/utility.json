@@ -1,0 +1,27 @@
+{
+  "utility": [
+    {
+      "name": "Electricity",
+      "monthlyHistory": [
+        {
+          "dateKey": "2026-01-01",
+          "amount": 2000.00,
+          "value": 504.00,
+          "balance": 0
+        },
+        {
+          "dateKey": "2026-02-01",
+          "amount": 2500.00,
+          "value": 618.5,
+          "balance":144.0
+        },
+        {
+          "dateKey": "2026-03-01",
+          "amount": 2000.00,
+          "value": 504.10,
+          "balance":415.3
+        }
+      ]
+    }
+  ]
+}
