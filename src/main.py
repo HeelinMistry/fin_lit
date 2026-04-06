@@ -4,7 +4,6 @@ from src.api_client import APIClient
 from src.financial_analysis import *
 from src.financial_forecast import *
 from src.financial_logger import *
-from src.utility_analysis import analyze_utility_data, format_and_print_utility_analysis
 
 setup_user_output()
 
