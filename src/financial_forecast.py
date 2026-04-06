@@ -185,9 +185,6 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
 def calculate_simple_projection(current_balance, annual_rate, monthly_payment, months_to_project):
     """
     Projects the future balance of a single account using monthly compounding.
-    
-    For a loan: current_balance should be positive, annual_rate positive, 
-               and monthly_payment negative (to reduce balance).
     """
     if months_to_project <= 0:
         return current_balance
@@ -196,7 +193,6 @@ def calculate_simple_projection(current_balance, annual_rate, monthly_payment, m
     monthly_rate = annual_rate / 12.0
 
     # Part 1: Future Value of the Current Balance (PV)
-    # Debt grows with positive interest, assets grow with positive return.
     future_value_of_pv = current_balance * np.power((1 + monthly_rate), months_to_project)
 
     # Part 2: Future Value of the Monthly Payments (PMT)
@@ -256,7 +252,15 @@ def run_net_worth_forecast(accounts_data, forecast_years=10, lookback_months=3):
 
         if account_type == 'SAVING':
             rate = historical_rate
-            monthly_payment = monthly_payment_raw 
+            
+            # TFSA / ISA logic: These have annual caps. Projecting a rolling monthly
+            # average for 10 years would be inaccurate if the cap is hit early.
+            # We treat these as growth-only (compounding existing P&L).
+            if "TFSA" in account_name.upper():
+                monthly_payment = 0.0
+                logging.debug(f"Account '{account_name}' identified as TFSA. Ignoring contributions for long-term projection.")
+            else:
+                monthly_payment = monthly_payment_raw 
 
             projected_balance = calculate_simple_projection(
                 current_balance, rate, monthly_payment, months_to_project
@@ -264,9 +268,7 @@ def run_net_worth_forecast(accounts_data, forecast_years=10, lookback_months=3):
             projected_net_worth += projected_balance
 
         elif account_type == 'LOAN':
-            # Use positive interest rate for debt growth
             rate = historical_rate 
-            # Use negative payment to reduce debt principal
             monthly_payment = -monthly_payment_raw 
 
             months_to_payoff, payoff_date_str = calculate_loan_payoff_date(
