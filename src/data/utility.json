@@ -20,6 +20,18 @@
           "amount": 2000.00,
           "value": 504.10,
           "balance":415.3
+        },
+        {
+          "dateKey": "2026-04-09",
+          "amount": 2000.00,
+          "value": 504.10,
+          "balance":333.69
+        },
+        {
+          "dateKey": "2026-05-01",
+          "amount": 2000.00,
+          "value": 504.10,
+          "balance":399.36
         }
       ]
     }
