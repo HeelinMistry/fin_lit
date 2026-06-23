@@ -171,8 +171,7 @@ def get_rolling_average_inputs(account_data, lookback_months=3):
         df_loan_lookback = original_df[original_df['monthKey_str'].isin(lookback_months_list)].copy()
 
         if 'interestRate' in df_loan_lookback.columns:
-            # Using median interest rate for loans
-            avg_rate = df_loan_lookback['interestRate'].median()
+            avg_rate = df_loan_lookback['interestRate'].iloc[-1]
         else:
             avg_rate = 0.0
 
