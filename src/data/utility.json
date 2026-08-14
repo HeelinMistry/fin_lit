@@ -44,6 +44,30 @@
           "amount": 1500.00,
           "value": 338.30,
           "balance":127.50
+        },
+        {
+          "dateKey": "2026-07-16",
+          "amount": 1000.00,
+          "value": 243.80,
+          "balance":94.05
+        },
+        {
+          "dateKey": "2026-07-29",
+          "amount": 1000.00,
+          "value": 223.20,
+          "balance":72.51
+        },
+        {
+          "dateKey": "2026-08-01",
+          "amount": 1000.00,
+          "value": 243.80,
+          "balance":236.24
+        },
+        {
+          "dateKey": "2026-08-14",
+          "amount": 1000.00,
+          "value": 223.20,
+          "balance":157.34
         }
       ]
     }
